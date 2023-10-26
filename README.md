@@ -87,13 +87,13 @@ CoDeF
 
 You can download checkpoints pre-trained on the provided videos via
 
-| Sequence Name | Config |                           Download                           |
-| :-------- | :----: | :----------------------------------------------------------: |
-| beauty_0 | configs/beauty_0/base.yaml |  [Google drive link](https://drive.google.com/file/d/11SWfnfDct8bE16802PyqYJqsU4x6ACn8/view?usp=sharing) |
-| beauty_1 | configs/beauty_1/base.yaml |  [Google drive link](https://drive.google.com/file/d/1bSK0ChbPdURWGLdtc9CPLkN4Tfnng51k/view?usp=sharing) |
-| white_smoke      | configs/white_smoke/base.yaml |  [Google drive link](https://drive.google.com/file/d/1QOBCDGV2hHwxq4eL1E_45z5zhZ-wTJR7/view?usp=sharing) |
-| lemon_hit      | configs/lemon_hit/base.yaml |  [Google drive link](https://drive.google.com/file/d/140ctcLbv7JTIiy53MuCYtI4_zpIvRXzq/view?usp=sharing) |
-| scene_0      | configs/scene_0/base.yaml |  [Google drive link](https://drive.google.com/file/d/1abOdREarfw1DGscahOJd2gZf1Xn_zN-F/view?usp=sharing) |
+| Sequence Name | Config |                           Download                           | OpenXLab | 
+| :-------- | :----: | :----------------------------------------------------------: | :---------| 
+| beauty_0 | configs/beauty_0/base.yaml |  [Google drive link](https://drive.google.com/file/d/11SWfnfDct8bE16802PyqYJqsU4x6ACn8/view?usp=sharing) |[![Open in OpenXLab](https://cdn-static.openxlab.org.cn/header/openxlab_models.svg)](https://openxlab.org.cn/models/detail/HaoOuyang/CoDeF)|
+| beauty_1 | configs/beauty_1/base.yaml |  [Google drive link](https://drive.google.com/file/d/1bSK0ChbPdURWGLdtc9CPLkN4Tfnng51k/view?usp=sharing) | [![Open in OpenXLab](https://cdn-static.openxlab.org.cn/header/openxlab_models.svg)](https://openxlab.org.cn/models/detail/HaoOuyang/CoDeF) |
+| white_smoke      | configs/white_smoke/base.yaml |  [Google drive link](https://drive.google.com/file/d/1QOBCDGV2hHwxq4eL1E_45z5zhZ-wTJR7/view?usp=sharing) | [![Open in OpenXLab](https://cdn-static.openxlab.org.cn/header/openxlab_models.svg)](https://openxlab.org.cn/models/detail/HaoOuyang/CoDeF) |
+| lemon_hit      | configs/lemon_hit/base.yaml |  [Google drive link](https://drive.google.com/file/d/140ctcLbv7JTIiy53MuCYtI4_zpIvRXzq/view?usp=sharing) | [![Open in OpenXLab](https://cdn-static.openxlab.org.cn/header/openxlab_models.svg)](https://openxlab.org.cn/models/detail/HaoOuyang/CoDeF)|
+| scene_0      | configs/scene_0/base.yaml |  [Google drive link](https://drive.google.com/file/d/1abOdREarfw1DGscahOJd2gZf1Xn_zN-F/view?usp=sharing) |[![Open in OpenXLab](https://cdn-static.openxlab.org.cn/header/openxlab_models.svg)](https://openxlab.org.cn/models/detail/HaoOuyang/CoDeF)|
 
 And organize files as follows
 
