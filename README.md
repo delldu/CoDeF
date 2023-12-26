@@ -88,7 +88,7 @@ CoDeF
 You can download checkpoints pre-trained on the provided videos via
 
 | Sequence Name | Config |                           Download                           | OpenXLab | 
-| :-------- | :----: | :----------------------------------------------------------: | :---------| 
+| :-------- | :----: | :----------------------------------------------------------: | :---------:| 
 | beauty_0 | configs/beauty_0/base.yaml |  [Google drive link](https://drive.google.com/file/d/11SWfnfDct8bE16802PyqYJqsU4x6ACn8/view?usp=sharing) |[![Open in OpenXLab](https://cdn-static.openxlab.org.cn/header/openxlab_models.svg)](https://openxlab.org.cn/models/detail/HaoOuyang/CoDeF)|
 | beauty_1 | configs/beauty_1/base.yaml |  [Google drive link](https://drive.google.com/file/d/1bSK0ChbPdURWGLdtc9CPLkN4Tfnng51k/view?usp=sharing) | [![Open in OpenXLab](https://cdn-static.openxlab.org.cn/header/openxlab_models.svg)](https://openxlab.org.cn/models/detail/HaoOuyang/CoDeF) |
 | white_smoke      | configs/white_smoke/base.yaml |  [Google drive link](https://drive.google.com/file/d/1QOBCDGV2hHwxq4eL1E_45z5zhZ-wTJR7/view?usp=sharing) | [![Open in OpenXLab](https://cdn-static.openxlab.org.cn/header/openxlab_models.svg)](https://openxlab.org.cn/models/detail/HaoOuyang/CoDeF) |
