@@ -7,6 +7,7 @@ from einops import rearrange, reduce, repeat
 from torchvision import transforms as T
 import glob
 import cv2
+import pdb
 
 # The basic dataset of reading rays
 class VideoDataset(Dataset):
@@ -21,6 +22,15 @@ class VideoDataset(Dataset):
                  ref_idx=None,
                  canonical_dir=None,
                  test=False):
+        # split = 'train'
+        # img_wh = (960, 540)
+        # mask_dir = None
+        # flow_dir = None
+        # canonical_wh = [1280, 640]
+        # ref_idx = None
+        # canonical_dir = None
+        # test = True
+
         self.test = test
         self.root_dir = root_dir
         self.split = split
@@ -31,6 +41,8 @@ class VideoDataset(Dataset):
         self.ref_idx = ref_idx
         self.canonical_dir = canonical_dir
         self.read_meta()
+        # (Pdb) self.grid.size() -- [518400, 2]
+        # (Pdb) self.grid_c.size() -- [819200, 2]
 
     def read_meta(self):
         all_images_path = []
@@ -46,12 +58,12 @@ class VideoDataset(Dataset):
         self.grid = torch.from_numpy(rearrange(grid, 'c h w -> (h w) c'))
         warp_code = 1
         for input_image_path in sorted(glob.glob(f'{self.root_dir}/*')):
-            print(input_image_path)
+            # print(input_image_path)
             all_images_path.append(input_image_path)
             self.ts_w.append(torch.Tensor([warp_code]).long())
             warp_code += 1
 
-        if self.canonical_wh:
+        if self.canonical_wh: # [1280, 640]
             h_c = self.canonical_wh[1]
             w_c = self.canonical_wh[0]
             grid_c = np.indices((h_c, w_c)).astype(np.float32)

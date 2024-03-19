@@ -1,6 +1,6 @@
 GPUS=0
 
-NAME=scene_0
+NAME=white_smoke
 EXP_NAME=base
 
 ROOT_DIRECTORY="all_sequences/$NAME/$NAME"

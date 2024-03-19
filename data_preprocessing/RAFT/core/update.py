@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 class FlowHead(nn.Module):
     def __init__(self, input_dim=128, hidden_dim=256):
-        super(FlowHead, self).__init__()
+        super().__init__()
         self.conv1 = nn.Conv2d(input_dim, hidden_dim, 3, padding=1)
         self.conv2 = nn.Conv2d(hidden_dim, 2, 3, padding=1)
         self.relu = nn.ReLU(inplace=True)
@@ -15,7 +15,7 @@ class FlowHead(nn.Module):
 
 class ConvGRU(nn.Module):
     def __init__(self, hidden_dim=128, input_dim=192+128):
-        super(ConvGRU, self).__init__()
+        super().__init__()
         self.convz = nn.Conv2d(hidden_dim+input_dim, hidden_dim, 3, padding=1)
         self.convr = nn.Conv2d(hidden_dim+input_dim, hidden_dim, 3, padding=1)
         self.convq = nn.Conv2d(hidden_dim+input_dim, hidden_dim, 3, padding=1)
@@ -32,7 +32,7 @@ class ConvGRU(nn.Module):
 
 class SepConvGRU(nn.Module):
     def __init__(self, hidden_dim=128, input_dim=192+128):
-        super(SepConvGRU, self).__init__()
+        super().__init__()
         self.convz1 = nn.Conv2d(hidden_dim+input_dim, hidden_dim, (1,5), padding=(0,2))
         self.convr1 = nn.Conv2d(hidden_dim+input_dim, hidden_dim, (1,5), padding=(0,2))
         self.convq1 = nn.Conv2d(hidden_dim+input_dim, hidden_dim, (1,5), padding=(0,2))
@@ -61,7 +61,7 @@ class SepConvGRU(nn.Module):
 
 class SmallMotionEncoder(nn.Module):
     def __init__(self, args):
-        super(SmallMotionEncoder, self).__init__()
+        super().__init__()
         cor_planes = args.corr_levels * (2*args.corr_radius + 1)**2
         self.convc1 = nn.Conv2d(cor_planes, 96, 1, padding=0)
         self.convf1 = nn.Conv2d(2, 64, 7, padding=3)
@@ -78,7 +78,7 @@ class SmallMotionEncoder(nn.Module):
 
 class BasicMotionEncoder(nn.Module):
     def __init__(self, args):
-        super(BasicMotionEncoder, self).__init__()
+        super().__init__()
         cor_planes = args.corr_levels * (2*args.corr_radius + 1)**2
         self.convc1 = nn.Conv2d(cor_planes, 256, 1, padding=0)
         self.convc2 = nn.Conv2d(256, 192, 3, padding=1)
@@ -98,7 +98,7 @@ class BasicMotionEncoder(nn.Module):
 
 class SmallUpdateBlock(nn.Module):
     def __init__(self, args, hidden_dim=96):
-        super(SmallUpdateBlock, self).__init__()
+        super().__init__()
         self.encoder = SmallMotionEncoder(args)
         self.gru = ConvGRU(hidden_dim=hidden_dim, input_dim=82+64)
         self.flow_head = FlowHead(hidden_dim, hidden_dim=128)
@@ -113,7 +113,7 @@ class SmallUpdateBlock(nn.Module):
 
 class BasicUpdateBlock(nn.Module):
     def __init__(self, args, hidden_dim=128, input_dim=128):
-        super(BasicUpdateBlock, self).__init__()
+        super().__init__()
         self.args = args
         self.encoder = BasicMotionEncoder(args)
         self.gru = SepConvGRU(hidden_dim=hidden_dim, input_dim=128+hidden_dim)

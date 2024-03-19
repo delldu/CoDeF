@@ -10,7 +10,7 @@ from torch.optim.lr_scheduler import ExponentialLR
 from .warmup_scheduler import GradualWarmupScheduler
 
 from .video_visualizer import VideoVisualizer
-
+import pdb
 
 def get_parameters(models):
     """Get all model parameters recursively."""
@@ -30,6 +30,8 @@ def get_parameters(models):
 def get_optimizer(hparams, models):
     eps = 1e-8
     parameters = get_parameters(models)
+    pdb.set_trace()
+
     if hparams.optimizer == 'sgd':
         optimizer = SGD(parameters, lr=hparams.lr,
                         momentum=hparams.momentum, weight_decay=hparams.weight_decay)
@@ -49,6 +51,8 @@ def get_optimizer(hparams, models):
 
 def get_scheduler(hparams, optimizer):
     eps = 1e-8
+    pdb.set_trace()
+    
     if hparams.lr_scheduler == 'steplr':
         scheduler = MultiStepLR(optimizer, milestones=hparams.decay_step,
                                 gamma=hparams.decay_gamma)
@@ -74,7 +78,7 @@ def get_learning_rate(optimizer):
     for param_group in optimizer.param_groups:
         return param_group['lr']
 
-def extract_model_state_dict(ckpt_path, model_name='model', prefixes_to_ignore=[]):
+def extract_model_state_dict(ckpt_path, model_name='model'):
     checkpoint = torch.load(ckpt_path, map_location=torch.device('cpu'))
     checkpoint_ = {}
     if 'state_dict' in checkpoint: # if it's a pytorch-lightning checkpoint
@@ -83,19 +87,14 @@ def extract_model_state_dict(ckpt_path, model_name='model', prefixes_to_ignore=[
         if not k.startswith(model_name):
             continue
         k = k[len(model_name)+1:]
-        for prefix in prefixes_to_ignore:
-            if k.startswith(prefix):
-                print('ignore', k)
-                break
-        else:
-            checkpoint_[k] = v
+        checkpoint_[k] = v
     return checkpoint_
 
-def load_ckpt(model, ckpt_path, model_name='model', prefixes_to_ignore=[]):
+def load_ckpt(model, ckpt_path, model_name='model'):
     if not ckpt_path:
         return
     model_dict = model.state_dict()
-    checkpoint_ = extract_model_state_dict(ckpt_path, model_name, prefixes_to_ignore)
+    checkpoint_ = extract_model_state_dict(ckpt_path, model_name)
     model_dict.update(checkpoint_)
     model.load_state_dict(model_dict)
 

@@ -23,7 +23,7 @@ except:
 
 class RAFT(nn.Module):
     def __init__(self, args):
-        super(RAFT, self).__init__()
+        super().__init__()
         self.args = args
 
         if args.small:
