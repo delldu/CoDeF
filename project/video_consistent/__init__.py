@@ -12,89 +12,122 @@
 __version__ = "1.0.0"
 
 import os
-import redos
-import todos
 import torch
-import torchvision.transforms as transforms
-from PIL import Image
+import torch.nn.functional as F
+
 from tqdm import tqdm
 
 from . import network
+from . import dataset
+
+import todos
 
 import pdb
 
+def get_dataset(input_dir):
+    """Get dataset."""
+    return dataset.VideoDataset(input_dir)
 
-
-def get_video_consistent_model():
+def get_model(checkpoint):
     """Create model."""
-
-    model = motion.ImageAnimation(model_path="models/drive_consistent.pth")
     device = todos.model.get_device()
-    model = model.to(device)
-    model.eval()
+    net = network.VideoConsistenModel()
+    net.load_weights(checkpoint)
+    net = net.to(device)
 
-    print(f"Running on {device} ...")
-    # make sure model good for C/C++
-    model = torch.jit.script(model)
-    # https://github.com/pytorch/pytorch/issues/52286
-    torch._C._jit_set_profiling_executor(False)
-    # C++ Reference
-    # torch::jit::getProfilingMode() = false;                                                                                                             
-    # torch::jit::setTensorExprFuserEnabled(false);
+    print(f"Running model on {device} ...")
 
-    return model, device
+    return net, device
 
 
-def drive_consistent(video_file, canonical_file, output_file):
-    # load video
-    video = redos.video.Reader(video_file)
-    if video.n_frames < 1:
-        print(f"Read video {video_file} error.")
-        return False
+def create_canonical_image(net, device, canonical_filename):
+    net.eval()
 
+    c_h = net.height
+    c_w = net.width
+    grid = dataset.make_grid(c_h, c_w).unsqueeze(0).to(device) # [1, H*W, 2]
+    tseq = torch.zeros((1)).unsqueeze(0).to(device) # [1, 1]
+
+    with torch.no_grad():
+        ret = net.forward(grid, tseq, False) # [B, C, H*W]
+
+    ret = ret.reshape(1, 3, c_h, c_w).clamp(0.0, 1.0)
+    # tensor [ret] size: [1, 3, c_h, c_w], min: 0.0, max: 0.828125, mean: 0.106751
+    todos.data.save_tensor(ret, canonical_filename)
+    todos.model.reset_device()
+
+
+def video_restruct(net, device, output_dir):
     # Create directory to store result
-    output_dir = output_file[0 : output_file.rfind(".")]
-    todos.data.mkdir(output_dir)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
-    # load model
-    model, device = get_video_consistent_model()
-    print(f"Running on {device} ...")
+    net.eval()
 
-    # load face image
-    print(f"{video_file} driving {canonical_file}, save to {output_file} ...")
+    n_frames = net.frames
+    all_tseq = torch.linspace(0, 1, net.frames).unsqueeze(1).to(device)
+    grid = dataset.make_grid(net.height, net.width).unsqueeze(0).to(device)
 
-    progress_bar = tqdm(total=video.n_frames)
+    progress_bar = tqdm(total=n_frames)
 
-    def drive_video_frame(no, data):
-        # print(f"-------> frame: {no} -- {data.shape}")
+    for i in range(n_frames):
         progress_bar.update(1)
 
-        driving_tensor = todos.data.frame_totensor(data)
-
-        # convert tensor from 1x4xHxW to 1x3xHxW
-        driving_tensor = driving_tensor[:, 0:3, :, :]
-        driving_tensor = todos.data.resize_tensor(driving_tensor, FACE_IMAGE_SIZE, FACE_IMAGE_SIZE)
-        if no == 0:
-            global start_driving_kp
-            start_driving_kp = driving_kp # save for next step offset kp
+        output_filename = f"{output_dir}/{i:06d}.png"
+        tseq = all_tseq[i].unsqueeze(0)
+        # tensor [tseq] size: [1, 1], min: 0.0, max: 0.0, mean: 0.0
+        # tensor [grid] size: [1, 921600, 2], min: 0.0, max: 0.999219, mean: 0.499457
 
         with torch.no_grad():
-            output_tensor = model(face_kp, offset_driving_kp, face_tensor)
-
-        temp_output_file = "{}/{:06d}.png".format(output_dir, no)
-        todos.data.save_tensor(output_tensor, temp_output_file)
-
-    video.forward(callback=drive_video_frame)
-
-    redos.video.encode(output_dir, output_file)
-
-    # delete temp files
-    for i in range(video.n_frames):
-        temp_output_file = "{}/{:06d}.png".format(output_dir, i)
-        os.remove(temp_output_file)
-    os.removedirs(output_dir)
+            ret = net.forward(grid, tseq, True)
+        ret = ret.reshape(1, 3, net.height, net.width)
+        ret = ret.clamp(0.0, 1.0)
+        # tensor [ret] size: [921600, 3], min: 0.0, max: 0.828125, mean: 0.106751
+        todos.data.save_tensor(ret, output_filename)
 
     todos.model.reset_device()
 
-    return True
+def video_restruct_with_canonical_image(canonical_file, net, device, output_dir):
+    c_image = todos.data.load_tensor(canonical_file).to(device)
 
+    # Create directory to store result
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    net.eval()
+
+    n_frames = net.frames
+    all_tseq = torch.linspace(0, 1, net.frames).unsqueeze(1).to(device)
+    grid = dataset.make_grid(net.height, net.width).unsqueeze(0).to(device)
+
+    progress_bar = tqdm(total=n_frames)
+
+    for i in range(n_frames):
+        progress_bar.update(1)
+
+        output_filename = f"{output_dir}/{i:06d}.png"
+        tseq = all_tseq[i].unsqueeze(0)
+        # tensor [tseq] size: [1, 1], min: 0.0, max: 0.0, mean: 0.0
+        # tensor [grid] size: [1, 921600, 2], min: 0.0, max: 0.999219, mean: 0.499457
+        one_grid = grid.squeeze(0)
+        one_time = all_tseq[i]
+        with torch.no_grad():
+            deformed_grid = net.deform_pts(one_grid, one_time, True)  # [batch * num_pixels, 2]
+
+        B, C, H, W = c_image.size()
+        grid_new = deformed_grid.clone()
+        grid_new[..., 1] = (2 * deformed_grid[..., 0] - 1) * net.height / H
+        grid_new[..., 0] = (2 * deformed_grid[..., 1] - 1) * net.width / W
+        grid_new = grid_new.reshape(1, net.height, net.width, 2)
+
+        # ------------------------------------------------------------
+        ret = F.grid_sample(c_image, grid_new, mode='bilinear', padding_mode='border')
+        # ------------------------------------------------------------
+        # tensor [results] size: [1, 3, H, W], min: 0.0, max: 0.996094, mean: 0.100389
+        # ret = ret.squeeze().permute(1,0)
+
+        ret = ret.clamp(0.0, 1.0)
+        # tensor [ret] size: [921600, 3], min: 0.0, max: 0.828125, mean: 0.106751
+        todos.data.save_tensor(ret, output_filename)
+
+    todos.model.reset_device()

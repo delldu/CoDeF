@@ -6,20 +6,23 @@ import cv2
 import numpy as np
 import pdb
 
-def make_image_grid(w, h):
+def make_grid(h:int, w:int):
     grid = np.indices((h, w)).astype(np.float32)
     # normalize
     grid[0,:,:] = grid[0,:,:] / h
     grid[1,:,:] = grid[1,:,:] / w
     grid = torch.from_numpy(rearrange(grid, 'c h w -> (h w) c'))
-    return grid
+    return grid # size() -- [h * w, 2]
 
 def load_image(image_path: str, w: int, h: int):
     input_image = cv2.cvtColor(cv2.imread(image_path), cv2.COLOR_BGR2RGB)
-    if input_image.shape[0] == h and input_image.shape[1] == w:
-        return input_image
-    # Need resize
-    return cv2.resize(input_image, (w, h), interpolation=cv2.INTER_AREA)
+
+    # Need resize ?
+    if input_image.shape[0] != h or input_image.shape[1] != w:
+        input_image = cv2.resize(input_image, (w, h), interpolation=cv2.INTER_AREA)
+
+    input_image = torch.from_numpy(np.array(input_image).astype(np.float32) / 255.0)
+    return input_image.permute(2, 0, 1) # hxwxc --> cxhxw
 
 
 class VideoDataset(Dataset):
@@ -29,11 +32,8 @@ class VideoDataset(Dataset):
         first_image = cv2.cvtColor(cv2.imread(all_images_path[0]), cv2.COLOR_BGR2RGB)
         h = first_image.shape[0]
         w = first_image.shape[1]
-        self.all_images = [load_image(ip, w, h) for ip in all_images_path]
-        self.all_images = torch.from_numpy(
-            np.array([(img).astype(np.float32) / 255.0 for img in self.all_images])
-        )
-        self.grid = make_image_grid(w, h)
+        self.all_images = [load_image(ip, w, h) for ip in all_images_path] # [C, H, W]
+        self.grid = make_grid(h, w) # [H * W, 2]
         # Normal time sequence
         self.tseq = torch.linspace(0, 1, len(self.all_images)).unsqueeze(-1)
 

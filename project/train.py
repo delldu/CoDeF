@@ -13,15 +13,13 @@
 import os
 import math
 import argparse
-import cv2
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from einops import rearrange
 
-from video_consistent.dataset import VideoDataset, make_image_grid
-from video_consistent.network import VideoConsistenModel
+import video_consistent
 
 from tqdm import tqdm
 
@@ -91,8 +89,6 @@ def train_epoch(loader, model, optimizer, device, tag="train"):
 
     total_loss = Counter()
 
-    model.train()
-
     #
     # /************************************************************************************
     # ***
@@ -100,10 +96,7 @@ def train_epoch(loader, model, optimizer, device, tag="train"):
     # ***
     # ************************************************************************************/
     #
-    loss_function = nn.MSELoss(reduction='mean')
-
-    correct = 0
-    total = 0
+    mse_loss = nn.MSELoss(reduction='mean')
 
     with tqdm(total=len(loader.dataset)) as t:
         t.set_description(tag)
@@ -111,30 +104,26 @@ def train_epoch(loader, model, optimizer, device, tag="train"):
         for batch in loader:
             # "rgbs", "grid", "tseq", "idxs"
             # Transform data to device
-            rgbs = batch["rgbs"].to(device)
-            grid = batch["grid"].to(device)
-            tseq = batch["tseq"].to(device)
+            rgbs = batch["rgbs"].to(device) # [2, 3, 720, 1280]
+            grid = batch["grid"].to(device) # [2, 921600, 2]
+            tseq = batch["tseq"].to(device) # [2, 1]
 
             count = len(rgbs)
-            assert count == 1, "Current only support 1 batch"
+            # assert count == 1, "Current only support 1 batch"
 
-            # Transform data to device
-            outputs = model(tseq, grid) # size() -- outputs.size() -- 921600, 3
-            rgbs_flattend = rearrange(rgbs, 'b h w c -> (b h w) c')
+            outputs = model(grid, tseq) # size() -- outputs.size() -- [2, 3, 921600]
 
             # Statics
-            loss = loss_function(rgbs_flattend, outputs.to(torch.float32))
+            loss = mse_loss(rearrange(rgbs, 'b c h w -> b c (h w)'), outputs.to(torch.float32))
             psnr = -20.0 * math.log10(math.sqrt(total_loss.avg + 1e-5))
-
 
             total_loss.update(loss.item(), count)
             t.set_postfix(loss="{:.6f}, psnr={:.3f}".format(total_loss.avg, psnr))
             t.update(count)
 
             # Optimizer
-            img_pred = outputs.reshape(rgbs.size()).to(torch.float32)
-            grad_loss = compute_gradient_loss(rgbs.permute(0, 3, 1, 2),
-                                              img_pred.permute(0, 3, 1, 2)).mean()
+            pred_rgbs = outputs.reshape(rgbs.size()).to(torch.float32)
+            grad_loss = compute_gradient_loss(pred_rgbs, rgbs).mean()
             loss = loss + 0.1 * grad_loss
 
             optimizer.zero_grad()
@@ -147,32 +136,26 @@ if __name__ == "__main__":
     """Trainning model."""
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("--input_dir", type=str, default="images", help="input image directory")
-
-    parser.add_argument("--output_dir", type=str, default="output", help="output directory")
-    parser.add_argument("--checkpoint", type=str, default="output/model.pth", help="checkpoint file")
-    parser.add_argument("--lr", type=float, default=5e-4, help="learning rate")
-    parser.add_argument("--epochs", type=int, default=50)
+    parser.add_argument("-i", "--input", type=str, default="images", help="Input image directory")
+    parser.add_argument("-o", "--output", type=str, default="output", help="Output directory")
+    parser.add_argument("--checkpoint", type=str, default="output/model.pth", help="Checkpoint file")
+    parser.add_argument("--lr", type=float, default=5e-4, help="Learning rate")
+    parser.add_argument("--bs", type=int, default=2, help="Batch size")
+    parser.add_argument("--epochs", type=int, default=50, help="Training epochs")
+    parser.add_argument("--psnr", type=float, default=40.0, help="Stop training when we got PSNR")
     args = parser.parse_args()
 
     # Create directory to store result
-    if not os.path.exists(args.output_dir):
-        os.makedirs(args.output_dir)
+    if not os.path.exists(args.output):
+        os.makedirs(args.output)
 
     # Step 1: get data loader
-    train_ds = VideoDataset(args.input_dir)
-    # Now only support batch_size === 1
-    train_dl = torch.utils.data.DataLoader(train_ds, batch_size=1, shuffle=True, num_workers=2)
+    train_ds = video_consistent.get_dataset(args.input)
+    train_dl = torch.utils.data.DataLoader(train_ds, batch_size=args.bs, shuffle=True, num_workers=4)
 
     # Step 2: get net
-    device = todos.model.get_device()
-    net = VideoConsistenModel()
-    net = net.to(device)
-    if os.path.exists(args.checkpoint):
-        print(f"Loading {args.checkpoint} ...")
-        sd = torch.load(args.checkpoint)
-        net.load_state_dict(sd['weight'])
-        print(f"model psnr={sd['psnr']:.3f}, frames: {sd['frames']}, {sd['height']} x {sd['width']}")
+    net, device = video_consistent.get_model(args.checkpoint)
+    net.train()
 
     #
     # /************************************************************************************
@@ -200,7 +183,7 @@ if __name__ == "__main__":
         # ***
         # ************************************************************************************/
         #
-        if epoch == (args.epochs // 2) or (epoch == args.epochs - 1):
+        if epoch == (args.epochs // 2) or (epoch == args.epochs - 1) or (last_psnr >= args.psnr):
             print(f"Saving model to {args.checkpoint} ...")
             model_dict = {}
             model_dict['psnr'] = last_psnr
@@ -210,22 +193,10 @@ if __name__ == "__main__":
             model_dict['weight'] = net.state_dict()
             torch.save(model_dict, args.checkpoint)
 
+            net.update(train_ds.frames, train_ds.height, train_ds.width)
+
+        if (last_psnr >= args.psnr):
+            break # Stop training for got expected quality
+
     # Create canonical image
-    c_h = train_ds.height + 64
-    c_w = train_ds.width + 64
-    canonical_filename = f"{args.output_dir}/canonical.png"
-    grid = make_image_grid(c_w, c_h).unsqueeze(0).to(device)
-    tseq = torch.zeros((1)).unsqueeze(0).to(device)
-    net.eval()
-
-    with torch.no_grad():
-        ret = net.forward(tseq, grid, False)
-
-    ret = ret.clamp(0.0, 1.0)
-    # tensor [ret] size: [921600, 3], min: 0.0, max: 0.828125, mean: 0.106751
-
-    ret = ret.float().cpu().numpy()
-    image = rearrange(ret, '(h w) c -> h w c', h=c_h, w=c_w)
-    image = image * 255
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    cv2.imwrite(canonical_filename, image)
+    video_consistent.create_canonical_image(net, device, f"{args.output}/canonical.png")

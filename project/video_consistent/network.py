@@ -72,7 +72,7 @@ class VideoHash(nn.Module):
         return x
 
 
-class DeformHash(nn.Module):
+class PlaneHash(nn.Module):
     def __init__(self):
         super().__init__()
         cdir = os.path.dirname(__file__)
@@ -89,7 +89,7 @@ class DeformHash(nn.Module):
             network_config=config["network_deform"],
         )
 
-    def forward(self, x, step=0):
+    def forward(self, x):
         # tensor [x] size: [819200, 3], min: -0.166667, max: 1.165625, mean: 0.335629
 
         input = x
@@ -104,38 +104,61 @@ class DeformHash(nn.Module):
 class VideoConsistenModel(nn.Module):
     def __init__(self):
         super().__init__()
-        self.deform_hash = DeformHash() # rgb->grid
+        self.plane_hash = PlaneHash() # xyt->grid
         self.video_hash = VideoHash() # grid->rgb
 
-    def deform_pts(self, tseq, grid, enable_warp: bool = True):
-        # grid - [921600, 2]
-        # tseq.size() -- [1, 1]
+        # Place holder
+        self.frames = 1
+        self.height = 1
+        self.wdith = 1
+
+    def update(self, n, h, w):
+        self.frames = n
+        self.height = h
+        self.width = w
+
+    def load_weights(self, file_path):
+        if os.path.exists(file_path):
+            print(f"Loading {file_path} ...")
+            sd = torch.load(file_path)
+            self.load_state_dict(sd['weight'])
+            self.update(sd['frames'], sd['height'], sd['width'])
+            print(f"model psnr={sd['psnr']:.3f}, frames: {self.frames}, {self.height} x {self.width}")
+
+    def deform_pts(self, one_grid, one_time, enable_warp: bool = True):
+        # one_grid - [921600, 2]
+        # one_time.size() -- [1]
         if enable_warp:
-            tseq = tseq.repeat(grid.shape[0], 1)
-            input_xyt = torch.cat([grid, tseq], dim=-1)
-            deform = self.deform_hash(input_xyt) # size() -- [518400, 3]
-            deformed_grid = deform + grid
+            HW, C = one_grid.size()
+            one_time = one_time.squeeze(0).repeat(HW, 1)
+            input_xyt = torch.cat([one_grid, one_time], dim=1)
+            deform = self.plane_hash(input_xyt) # size() -- [518400, 3]
+            deformed_grid = deform + one_grid
         else:
-            deformed_grid = grid
+            deformed_grid = one_grid
 
         # tensor [deformed_grid] size: [518400, 2], min: 0.024697, max: 1.060139, mean: 0.538712
-        return deformed_grid
+        return deformed_grid # size() -- [H*W, 2]
 
-    def forward(self, tseq, grid, enable_warp: bool = True):
-        # tseq.size() -- [4, 1]
-        # tseq = tensor([[1]], device='cuda:0')
-
-        # grid - [4, 921600, 2]
-        # grid = tensor([[[0.000000, 0.000000],
+    def forward(self, grids, times, enable_warp: bool = True):
+        # grids - [4, 921600, 2]
+        # grids = tensor([[[0.000000, 0.000000],
         #          [0.000000, 0.001042],
         #          [0.000000, 0.002083],
         #          ...,
         #          [0.998148, 0.996875],
         #          [0.998148, 0.997917],
         #          [0.998148, 0.998958]]], device='cuda:0')
+        # times.size() -- [4, 1]
 
-        grid = rearrange(grid, 'b n c -> (b n) c') # size() -- [921600, 2]
-        deformed_grid = self.deform_pts(tseq, grid, enable_warp)  # [batch * num_pixels, 2]
-        pe_deformed_grid = (deformed_grid + 0.3) / 1.6
-        return self.video_hash(pe_deformed_grid)
+        B, HW, C = grids.size()
+        # tiny cudann ONLY support one batch, overcome with loop !!!
+        rgb_predict = torch.zeros(B, HW, C + 1).to(grids.device)
+        for i in range(B):
+            one_grid = grids[i]
+            one_time = times[i]
+            one_deform = self.deform_pts(one_grid, one_time, enable_warp)
+            pe_one_deform = (one_deform + 0.3) / 1.6 # [B, H*W, 2]
+            rgb_predict[i] = self.video_hash(pe_one_deform) # [B, H*W, 3]
 
+        return rgb_predict.permute(0, 2, 1) # [B, H*W, C] ==> [B, C, H*W]
