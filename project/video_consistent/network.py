@@ -19,30 +19,47 @@ from einops import rearrange
 import todos
 import pdb
 
-class Embedding(nn.Module):
-    def __init__(self, in_channels=2, N_freqs=8):
-        """
-        Defines a function that embeds x to (x, sin(2^k x), cos(2^k x), ...)
-        in_channels: number of input channels (3 for both xyz and direction)
-        """
-        super().__init__()
-        self.funcs = [torch.sin, torch.cos] ###
-        self.freq_bands = 2**torch.linspace(0, N_freqs-1, N_freqs)
-        # [  1.,   2.,   4.,   8.,  16.,  32.,  64., 128.]
+# class Embedding(nn.Module):
+#     def __init__(self, in_channels=2, N_freqs=8):
+#         """
+#         Defines a function that embeds x to (x, sin(2^k x), cos(2^k x), ...)
+#         in_channels: number of input channels (3 for both xyz and direction)
+#         """
+#         super().__init__()
+#         self.funcs = [torch.sin, torch.cos] ###
+#         self.freq_bands = 2**torch.linspace(0, N_freqs-1, N_freqs)
+#         # [  1.,   2.,   4.,   8.,  16.,  32.,  64., 128.]
 
-    def forward(self, x):
-        """
-        Embeds x to (x, sin(2^k x), cos(2^k x), ...)
-        """
-        out = [x]
-        for freq in self.freq_bands:
-            for func in self.funcs:
-                out += [func(freq*x)]
+#     def forward(self, x):
+#         """
+#         Embeds x to (x, sin(2^k x), cos(2^k x), ...)
+#         """
+#         out = [x]
+#         for freq in self.freq_bands:
+#             for func in self.funcs:
+#                 out += [func(freq*x)]
 
-        return torch.cat(out, -1)
+#         return torch.cat(out, -1)
 
 
 class VideoHash(nn.Module):
+    '''
+    "encoding": {
+        "otype": "HashGrid",
+        "n_levels": 16,
+        "n_features_per_level": 2,
+        "log2_hashmap_size": 19,
+        "base_resolution": 16,
+        "per_level_scale": 1.44
+    },
+    "network": {
+        "otype": "FullyFusedMLP",
+        "activation": "ReLU",
+        "output_activation": "None",
+        "n_neurons": 64,
+        "n_hidden_layers": 2
+    },
+    '''
     def __init__(self):
         super().__init__()
         cdir = os.path.dirname(__file__)
@@ -64,8 +81,8 @@ class VideoHash(nn.Module):
         # tensor [x] size: [819200, 2], min: 0.083333, max: 0.916016, mean: 0.499548
 
         input = x
-        input = self.encoder(input)
-        input = torch.cat([x, input], dim=1)
+        input = self.encoder(input) # [921600, 32]
+        input = torch.cat([x, input], dim=1) # [921600, 34]
         x = self.decoder(input)
 
         # tensor [x] size: [819200, 3], min: -0.023834, max: 0.862793, mean: 0.112812
@@ -73,6 +90,23 @@ class VideoHash(nn.Module):
 
 
 class PlaneHash(nn.Module):
+    '''
+    "encoding_deform3d": {
+        "otype": "HashGrid",
+        "n_levels": 16,
+        "n_features_per_level": 2,
+        "log2_hashmap_size": 19,
+        "base_resolution": 16,
+        "per_level_scale": 1.38
+    },
+    "network_deform": {
+        "otype": "FullyFusedMLP",
+        "activation": "ReLU",
+        "output_activation": "None",
+        "n_neurons": 64,
+        "n_hidden_layers": 8
+    }
+    '''
     def __init__(self):
         super().__init__()
         cdir = os.path.dirname(__file__)
@@ -93,8 +127,8 @@ class PlaneHash(nn.Module):
         # tensor [x] size: [819200, 3], min: -0.166667, max: 1.165625, mean: 0.335629
 
         input = x
-        input = self.encoder(input)
-        input = torch.cat([x, input], dim=-1)
+        input = self.encoder(input) # [921600, 32]
+        input = torch.cat([x, input], dim=1) # size() -- [921600, 35]
 
         x = self.decoder(input) / 5.0
         # tensor [x] size: [819200, 2], min: -0.282471, max: 0.141968, mean: 0.038298
@@ -125,7 +159,7 @@ class VideoConsistenModel(nn.Module):
             self.update(sd['frames'], sd['height'], sd['width'])
             print(f"model psnr={sd['psnr']:.3f}, frames: {self.frames}, {self.height} x {self.width}")
 
-    def deform_pts(self, one_grid, one_time, enable_warp: bool = True):
+    def deform_xyt(self, one_grid, one_time, enable_warp: bool = True):
         # one_grid - [921600, 2]
         # one_time.size() -- [1]
         if enable_warp:
@@ -157,7 +191,7 @@ class VideoConsistenModel(nn.Module):
         for i in range(B):
             one_grid = grids[i]
             one_time = times[i]
-            one_deform = self.deform_pts(one_grid, one_time, enable_warp)
+            one_deform = self.deform_xyt(one_grid, one_time, enable_warp)
             pe_one_deform = (one_deform + 0.3) / 1.6 # [B, H*W, 2]
             rgb_predict[i] = self.video_hash(pe_one_deform) # [B, H*W, 3]
 

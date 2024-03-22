@@ -199,4 +199,8 @@ if __name__ == "__main__":
             break # Stop training for got expected quality
 
     # Create canonical image
-    video_consistent.create_canonical_image(net, device, f"{args.output}/canonical.png")
+    time = 0.0 # 0.0 - 1.0
+    rgbs = video_consistent.image_sample(net, device, time)
+    todos.data.save_tensor(rgbs, f"{args.output}/canonical.png")
+    todos.model.reset_device()
+
