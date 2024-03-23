@@ -80,8 +80,8 @@ def compute_gradient_loss(pred, gt):
     pred_grad = torch.cat([gradient_a_x, gradient_a_y], dim=1)
     gt_grad = torch.cat([gradient_b_x, gradient_b_y], dim=1)
 
-    gradient_difference = torch.abs(pred_grad - gt_grad).mean(dim=1,keepdim=True)
-
+    # gradient_difference = torch.abs(pred_grad - gt_grad).mean(dim=1,keepdim=True)
+    gradient_difference = torch.abs(pred_grad - gt_grad).mean()
     return gradient_difference
 
 def train_epoch(loader, model, optimizer, device, tag="train"):
@@ -108,23 +108,25 @@ def train_epoch(loader, model, optimizer, device, tag="train"):
             grid = batch["grid"].to(device) # [2, 921600, 2]
             tseq = batch["tseq"].to(device) # [2, 1]
 
-            count = len(rgbs)
+            count = len(rgbs) 
             # assert count == 1, "Current only support 1 batch"
 
             outputs = model(grid, tseq) # size() -- outputs.size() -- [2, 3, 921600]
+            outputs = outputs.to(torch.float32)
 
             # Statics
-            loss = mse_loss(rearrange(rgbs, 'b c h w -> b c (h w)'), outputs.to(torch.float32))
-            psnr = -20.0 * math.log10(math.sqrt(total_loss.avg + 1e-5))
+            loss = mse_loss(rearrange(rgbs, 'b c h w -> b c (h w)'), outputs)
+            pred_rgbs = outputs.reshape(rgbs.size()).to(torch.float32)
+            grad_loss = compute_gradient_loss(pred_rgbs, rgbs).mean()
+            loss = loss + 0.1 * grad_loss
+            total_loss.update(loss.item(), 1) # 1 for mse_loss reduce mean
 
-            total_loss.update(loss.item(), count)
+            # psnr = -10.0 * math.log10(loss.item() + 1e-5)
+            psnr = -10.0 * math.log10(total_loss.avg + 1e-5)
             t.set_postfix(loss="{:.6f}, psnr={:.3f}".format(total_loss.avg, psnr))
             t.update(count)
 
             # Optimizer
-            pred_rgbs = outputs.reshape(rgbs.size()).to(torch.float32)
-            grad_loss = compute_gradient_loss(pred_rgbs, rgbs).mean()
-            loss = loss + 0.1 * grad_loss
 
             optimizer.zero_grad()
             loss.backward()
@@ -140,7 +142,7 @@ if __name__ == "__main__":
     parser.add_argument("-o", "--output", type=str, default="output", help="Output directory")
     parser.add_argument("--checkpoint", type=str, default="output/model.pth", help="Checkpoint file")
     parser.add_argument("--lr", type=float, default=5e-4, help="Learning rate")
-    parser.add_argument("--bs", type=int, default=2, help="Batch size")
+    parser.add_argument("--bs", type=int, default=4, help="Batch size")
     parser.add_argument("--epochs", type=int, default=50, help="Training epochs")
     parser.add_argument("--psnr", type=float, default=40.0, help="Stop training when we got PSNR")
     args = parser.parse_args()
@@ -192,15 +194,18 @@ if __name__ == "__main__":
             model_dict['width'] = train_ds.width
             model_dict['weight'] = net.state_dict()
             torch.save(model_dict, args.checkpoint)
+            torch.save(net.xyt_grid.state_dict(), "/tmp/xyz.pth")
 
             net.update(train_ds.frames, train_ds.height, train_ds.width)
+
+            # Create atlas image
+            time = 0.0 # 0.0 - 1.0
+            rgbs = video_consistent.image_sample(net, device, time)
+            todos.data.save_tensor(rgbs, f"{args.output}/atlas.png")
+            net.train()
 
         if (last_psnr >= args.psnr):
             break # Stop training for got expected quality
 
-    # Create canonical image
-    time = 0.0 # 0.0 - 1.0
-    rgbs = video_consistent.image_sample(net, device, time)
-    todos.data.save_tensor(rgbs, f"{args.output}/canonical.png")
     todos.model.reset_device()
 

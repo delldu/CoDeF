@@ -30,9 +30,14 @@ class VideoDataset(Dataset):
         all_images_path = sorted(glob.glob(f"{root_dir}/*.png"))
         assert len(all_images_path) > 0, f"{root_dir} has any png image file"
         first_image = cv2.cvtColor(cv2.imread(all_images_path[0]), cv2.COLOR_BGR2RGB)
-        h = first_image.shape[0]//2
-        w = first_image.shape[1]//2
-        
+        h = first_image.shape[0]
+        w = first_image.shape[1]
+        if h > 512 or w > 512:
+            # s * h <= 512 and s * w <= 512
+            s = min(512/h, 512/w)
+            h = int(s * h)
+            w = int(s * w)
+
         self.all_images = [load_image(ip, w, h) for ip in all_images_path] # [C, H, W]
         self.grid = make_grid(h, w) # [H * W, 2]
         # Normal time sequence

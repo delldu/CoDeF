@@ -11,5 +11,6 @@
 
 import video_consistent
 
-video_consistent.drive_consistent("videos/0006.mp4", "images/0024.png", "output/face_motion.mp4")
+# video_consistent.drive_consistent("videos/0006.mp4", "images/0024.png", "output/face_motion.mp4")
 # image_animation.drive_body("videos/0010.mp4", "images/0025.png", "output/body_motion.mp4")
+

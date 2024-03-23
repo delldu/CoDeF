@@ -14,52 +14,12 @@ import json
 import torch
 from torch import nn
 import tinycudann as tcnn
-from einops import rearrange
-
+from .hashgrid import HashEmbedder
 import todos
 import pdb
 
-# class Embedding(nn.Module):
-#     def __init__(self, in_channels=2, N_freqs=8):
-#         """
-#         Defines a function that embeds x to (x, sin(2^k x), cos(2^k x), ...)
-#         in_channels: number of input channels (3 for both xyz and direction)
-#         """
-#         super().__init__()
-#         self.funcs = [torch.sin, torch.cos] ###
-#         self.freq_bands = 2**torch.linspace(0, N_freqs-1, N_freqs)
-#         # [  1.,   2.,   4.,   8.,  16.,  32.,  64., 128.]
 
-#     def forward(self, x):
-#         """
-#         Embeds x to (x, sin(2^k x), cos(2^k x), ...)
-#         """
-#         out = [x]
-#         for freq in self.freq_bands:
-#             for func in self.funcs:
-#                 out += [func(freq*x)]
-
-#         return torch.cat(out, -1)
-
-
-class VideoHash(nn.Module):
-    '''
-    "encoding": {
-        "otype": "HashGrid",
-        "n_levels": 16,
-        "n_features_per_level": 2,
-        "log2_hashmap_size": 19,
-        "base_resolution": 16,
-        "per_level_scale": 1.44
-    },
-    "network": {
-        "otype": "FullyFusedMLP",
-        "activation": "ReLU",
-        "output_activation": "None",
-        "n_neurons": 64,
-        "n_hidden_layers": 2
-    },
-    '''
+class Grid2RGB(nn.Module):
     def __init__(self):
         super().__init__()
         cdir = os.path.dirname(__file__)
@@ -70,6 +30,7 @@ class VideoHash(nn.Module):
             n_input_dims=2, 
             encoding_config=config["encoding"],
         )
+
         self.decoder = tcnn.Network(
             n_input_dims=self.encoder.n_output_dims + 2, # 34
             n_output_dims=3,
@@ -82,6 +43,7 @@ class VideoHash(nn.Module):
 
         input = x
         input = self.encoder(input) # [921600, 32]
+
         input = torch.cat([x, input], dim=1) # [921600, 34]
         x = self.decoder(input)
 
@@ -89,24 +51,7 @@ class VideoHash(nn.Module):
         return x
 
 
-class PlaneHash(nn.Module):
-    '''
-    "encoding_deform3d": {
-        "otype": "HashGrid",
-        "n_levels": 16,
-        "n_features_per_level": 2,
-        "log2_hashmap_size": 19,
-        "base_resolution": 16,
-        "per_level_scale": 1.38
-    },
-    "network_deform": {
-        "otype": "FullyFusedMLP",
-        "activation": "ReLU",
-        "output_activation": "None",
-        "n_neurons": 64,
-        "n_hidden_layers": 8
-    }
-    '''
+class XYT2Grid(nn.Module):
     def __init__(self):
         super().__init__()
         cdir = os.path.dirname(__file__)
@@ -117,6 +62,8 @@ class PlaneHash(nn.Module):
             n_input_dims=3,
             encoding_config=config["encoding_deform3d"],
         )
+        # self.encoder = HashEmbedder()
+
         self.decoder = tcnn.Network(
             n_input_dims=self.encoder.n_output_dims + 3, # 35
             n_output_dims=2,
@@ -135,12 +82,12 @@ class PlaneHash(nn.Module):
         return x
 
 
-class VideoConsistenModel(nn.Module):
+class VideoConsisten(nn.Module):
     def __init__(self):
         super().__init__()
-        self.plane_hash = PlaneHash() # xyt->grid
-        self.video_hash = VideoHash() # grid->rgb
-
+        self.xyt_grid = XYT2Grid()
+        self.grid_rgb = Grid2RGB()
+        
         # Place holder
         self.frames = 1
         self.height = 1
@@ -166,7 +113,7 @@ class VideoConsistenModel(nn.Module):
             HW, C = one_grid.size()
             one_time = one_time.squeeze(0).repeat(HW, 1)
             input_xyt = torch.cat([one_grid, one_time], dim=1)
-            deform = self.plane_hash(input_xyt) # size() -- [518400, 3]
+            deform = self.xyt_grid(input_xyt) # size() -- [518400, 3]
             deformed_grid = deform + one_grid
         else:
             deformed_grid = one_grid
@@ -192,7 +139,8 @@ class VideoConsistenModel(nn.Module):
             one_grid = grids[i]
             one_time = times[i]
             one_deform = self.deform_xyt(one_grid, one_time, enable_warp)
-            pe_one_deform = (one_deform + 0.3) / 1.6 # [B, H*W, 2]
-            rgb_predict[i] = self.video_hash(pe_one_deform) # [B, H*W, 3]
+            # pe_one_deform = (one_deform + 0.3) / 1.6 # [H*W, 2]
+            # rgb_predict[i] = self.grid_rgb(pe_one_deform) # [H*W, 3]
+            rgb_predict[i] = self.grid_rgb(one_deform) # [H*W, 3]
 
         return rgb_predict.permute(0, 2, 1) # [B, H*W, C] ==> [B, C, H*W]

@@ -31,7 +31,7 @@ def get_dataset(input_dir):
 def get_model(checkpoint):
     """Create model."""
     device = todos.model.get_device()
-    net = network.VideoConsistenModel()
+    net = network.VideoConsisten()
     net.load_weights(checkpoint)
     net = net.to(device)
 
@@ -89,6 +89,7 @@ def video_restruct(net, device, output_dir):
 
 def video_sample(ref_filename, net, device, output_dir):
     c_image = todos.data.load_tensor(ref_filename).to(device)
+    B, C, H, W = c_image.size()
 
     # Create directory to store result
     if not os.path.exists(output_dir):
@@ -113,7 +114,6 @@ def video_sample(ref_filename, net, device, output_dir):
         with torch.no_grad():
             deformed_grid = net.deform_xyt(one_grid, one_time, True)  # [batch * num_pixels, 2]
 
-        B, C, H, W = c_image.size()
         grid_new = deformed_grid.clone()
         grid_new[..., 1] = (2 * deformed_grid[..., 0] - 1) * net.height / H
         grid_new[..., 0] = (2 * deformed_grid[..., 1] - 1) * net.width / W
