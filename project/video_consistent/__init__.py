@@ -40,7 +40,7 @@ def get_model(checkpoint):
     return net, device
 
 
-def video_restruct(net, device, output_dir):
+def video_reconstruct(net, device, output_dir):
     # Create directory to store result
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
