@@ -40,24 +40,6 @@ def get_model(checkpoint):
     return net, device
 
 
-def image_sample(net, device, time):
-    '''
-    # time = 0.5 for middle frame
-    '''
-    c_h = net.height
-    c_w = net.width
-    grid = dataset.make_grid(c_h, c_w).unsqueeze(0).to(device) # [1, H*W, 2]
-    tseq = time * torch.ones((1)).unsqueeze(0).to(device) # [1, 1]
-
-    net.eval()
-    with torch.no_grad():
-        ret = net.forward(grid, tseq, False) # [B, C, H*W]
-
-    rgbs = ret.reshape(1, 3, c_h, c_w).clamp(0.0, 1.0)
-    # tensor [rgbs] size: [1, 3, c_h, c_w], min: 0.0, max: 0.828125, mean: 0.106751
-    return rgbs
-
-
 def video_restruct(net, device, output_dir):
     # Create directory to store result
     if not os.path.exists(output_dir):
@@ -79,7 +61,7 @@ def video_restruct(net, device, output_dir):
         # tensor [grid] size: [1, 921600, 2], min: 0.0, max: 0.999219, mean: 0.499457
 
         with torch.no_grad():
-            ret = net.forward(grid, tseq, True)
+            ret = net.forward(grid, tseq)
         # tensor [ret] size: [1, 3, 921600], min: 0.0, max: 0.828125, mean: 0.106751
         rgbs = ret.reshape(1, 3, net.height, net.width)
         rgbs = rgbs.clamp(0.0, 1.0)
@@ -112,7 +94,7 @@ def video_sample(ref_filename, net, device, output_dir):
         one_grid = grid.squeeze(0)
         one_time = all_tseq[i]
         with torch.no_grad():
-            deformed_grid = net.deform_xyt(one_grid, one_time, True)  # [batch * num_pixels, 2]
+            deformed_grid = net.deform_xyt(one_grid, one_time)  # [batch * num_pixels, 2]
 
         grid_new = deformed_grid.clone()
         grid_new[..., 1] = (2 * deformed_grid[..., 0] - 1) * net.height / H

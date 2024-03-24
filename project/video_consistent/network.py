@@ -15,6 +15,7 @@ import torch
 from torch import nn
 import tinycudann as tcnn
 from .hashgrid import HashEmbedder
+from . import dataset
 import todos
 import pdb
 
@@ -106,22 +107,19 @@ class VideoConsisten(nn.Module):
             self.update(sd['frames'], sd['height'], sd['width'])
             print(f"model psnr={sd['psnr']:.3f}, frames: {self.frames}, {self.height} x {self.width}")
 
-    def deform_xyt(self, one_grid, one_time, enable_warp: bool = True):
+    def deform_xyt(self, one_grid, one_time):
         # one_grid - [921600, 2]
         # one_time.size() -- [1]
-        if enable_warp:
-            HW, C = one_grid.size()
-            one_time = one_time.squeeze(0).repeat(HW, 1)
-            input_xyt = torch.cat([one_grid, one_time], dim=1)
-            deform = self.xyt_grid(input_xyt) # size() -- [518400, 3]
-            deformed_grid = deform + one_grid
-        else:
-            deformed_grid = one_grid
+        HW, C = one_grid.size()
+        one_time = one_time.squeeze(0).repeat(HW, 1)
+        input_xyt = torch.cat([one_grid, one_time], dim=1)
+        deform = self.xyt_grid(input_xyt) # size() -- [518400, 3]
+        deformed_grid = deform + one_grid
 
         # tensor [deformed_grid] size: [518400, 2], min: 0.024697, max: 1.060139, mean: 0.538712
         return deformed_grid # size() -- [H*W, 2]
 
-    def forward(self, grids, times, enable_warp: bool = True):
+    def forward(self, grids, times):
         # grids - [4, 921600, 2]
         # grids = tensor([[[0.000000, 0.000000],
         #          [0.000000, 0.001042],
@@ -138,9 +136,18 @@ class VideoConsisten(nn.Module):
         for i in range(B):
             one_grid = grids[i]
             one_time = times[i]
-            one_deform = self.deform_xyt(one_grid, one_time, enable_warp)
+            one_deform = self.deform_xyt(one_grid, one_time)
             # pe_one_deform = (one_deform + 0.3) / 1.6 # [H*W, 2]
             # rgb_predict[i] = self.grid_rgb(pe_one_deform) # [H*W, 3]
             rgb_predict[i] = self.grid_rgb(one_deform) # [H*W, 3]
 
         return rgb_predict.permute(0, 2, 1) # [B, H*W, C] ==> [B, C, H*W]
+
+    def create_atlas(self):
+        c_h = self.height
+        c_w = self.width
+        grid = dataset.make_grid(c_h, c_w).to(self.xyt_grid.decoder.params.device) # [H*W, 2]
+        ret = self.grid_rgb(grid).to(torch.float32) # [H*W, 3]
+        rgbs = ret.permute(1, 0).reshape(1, 3, c_h, c_w).clamp(0.0, 1.0)
+        # tensor [rgbs] size: [1, 3, c_h, c_w], min: 0.0, max: 0.828125, mean: 0.106751
+        return rgbs

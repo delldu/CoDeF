@@ -49,8 +49,7 @@ class Counter(object):
         self.avg = self.sum / self.count
 
 def rgb_to_gray(image):
-    gray_image = (0.299 * image[:, 0, :, :] + 0.587 * image[:, 1, :, :] +
-                  0.114 * image[:, 2, :, :])
+    gray_image = (0.299 * image[:, 0, :, :] + 0.587 * image[:, 1, :, :] + 0.114 * image[:, 2, :, :])
     gray_image = gray_image.unsqueeze(1)
 
     return gray_image
@@ -61,16 +60,13 @@ def compute_gradient_loss(pred, gt):
     pred = rgb_to_gray(pred)
     gt = rgb_to_gray(gt)
 
-    sobel_kernel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], 
-        dtype=pred.dtype, device=pred.device)
-    sobel_kernel_y = torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], 
-        dtype=pred.dtype, device=pred.device)
+    sobel_kernel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=pred.dtype, device=pred.device)
+    sobel_kernel_y = torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=pred.dtype, device=pred.device)
 
     gradient_a_x = F.conv2d(pred.repeat(1,3,1,1), 
         sobel_kernel_x.unsqueeze(0).unsqueeze(0).repeat(1,3,1,1), padding=1)/3
     gradient_a_y = F.conv2d(pred.repeat(1,3,1,1), 
         sobel_kernel_y.unsqueeze(0).unsqueeze(0).repeat(1,3,1,1), padding=1)/3
-    # gradient_a_magnitude = torch.sqrt(gradient_a_x ** 2 + gradient_a_y ** 2)
 
     gradient_b_x = F.conv2d(gt.repeat(1,3,1,1), 
         sobel_kernel_x.unsqueeze(0).unsqueeze(0).repeat(1,3,1,1), padding=1)/3
@@ -127,7 +123,6 @@ def train_epoch(loader, model, optimizer, device, tag="train"):
             t.update(count)
 
             # Optimizer
-
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -142,7 +137,7 @@ if __name__ == "__main__":
     parser.add_argument("-o", "--output", type=str, default="output", help="Output directory")
     parser.add_argument("--checkpoint", type=str, default="output/model.pth", help="Checkpoint file")
     parser.add_argument("--lr", type=float, default=5e-4, help="Learning rate")
-    parser.add_argument("--bs", type=int, default=4, help="Batch size")
+    parser.add_argument("--bs", type=int, default=12, help="Batch size")
     parser.add_argument("--epochs", type=int, default=50, help="Training epochs")
     parser.add_argument("--psnr", type=float, default=40.0, help="Stop training when we got PSNR")
     args = parser.parse_args()
@@ -199,8 +194,8 @@ if __name__ == "__main__":
             net.update(train_ds.frames, train_ds.height, train_ds.width)
 
             # Create atlas image
-            time = 0.0 # 0.0 - 1.0
-            rgbs = video_consistent.image_sample(net, device, time)
+            net.eval()
+            rgbs = net.create_atlas()
             todos.data.save_tensor(rgbs, f"{args.output}/atlas.png")
             net.train()
 
